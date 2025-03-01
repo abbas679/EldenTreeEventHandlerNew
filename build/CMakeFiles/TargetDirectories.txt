@@ -1,0 +1,4 @@
+C:/Users/ADEEL/PROJECT/EldenTreeEventHandlerNew/build/CMakeFiles/eldentree_tests.dir
+C:/Users/ADEEL/PROJECT/EldenTreeEventHandlerNew/build/CMakeFiles/eldentree_benchmark.dir
+C:/Users/ADEEL/PROJECT/EldenTreeEventHandlerNew/build/CMakeFiles/edit_cache.dir
+C:/Users/ADEEL/PROJECT/EldenTreeEventHandlerNew/build/CMakeFiles/rebuild_cache.dir
