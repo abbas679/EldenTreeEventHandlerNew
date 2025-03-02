@@ -3,57 +3,62 @@
 
 #include <functional>
 #include <unordered_map>
-#include <vector>
-#include <mutex>
+#include <list>  // Use list instead of vector for efficient removal
+#include <shared_mutex>  // Use shared_mutex for better concurrency
 
 namespace EldenTree {
 
-    // A templated event dispatcher that supports thread-safe subscription and event dispatching.
-    // EventKey: identifier for event type (could be an enum, int, etc.)
-    // EventData: data associated with an event.
     template<typename EventKey, typename EventData>
     class EventDispatcher {
     public:
         using Callback = std::function<void(const EventData&)>;
+        using CallbackList = std::list<Callback>;
 
         // Subscribe a callback function to a given event key.
         void subscribe(const EventKey& key, Callback callback) {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::shared_mutex> lock(mutex_);
             subscribers_[key].push_back(callback);
+        }
+
+        // Unsubscribe a specific callback function for a given event key.
+        void unsubscribe(const EventKey& key, Callback callbackToRemove) {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            auto it = subscribers_.find(key);
+            if (it != subscribers_.end()) {
+                it->second.remove_if([&](const Callback& cb) {
+                    return cb.target<void(const EventData&)>() == callbackToRemove.target<void(const EventData&)>();
+                });
+
+                if (it->second.empty()) {
+                    subscribers_.erase(it);  // Remove the empty list
+                }
+            }
         }
 
         // Dispatch an event to all subscribers associated with the given key.
         void dispatch(const EventKey& key, const EventData& data) {
-            std::vector<Callback> callbacks_copy;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                auto it = subscribers_.find(key);
-                if (it != subscribers_.end()) {
-                    callbacks_copy = it->second;
+            std::shared_lock<std::shared_mutex> lock(mutex_);
+            auto it = subscribers_.find(key);
+            if (it != subscribers_.end()) {
+                for (const auto& callback : it->second) {
+                    callback(data);  // Call directly to avoid unnecessary copying
                 }
-            }
-            for (auto &callback : callbacks_copy) {
-                callback(data);
             }
         }
 
         // Dispatch an event to all subscribers across all event keys.
         void dispatch_all(const EventData& data) {
-            std::vector<Callback> all_callbacks;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                for (auto &pair : subscribers_) {
-                    all_callbacks.insert(all_callbacks.end(), pair.second.begin(), pair.second.end());
+            std::shared_lock<std::shared_mutex> lock(mutex_);
+            for (auto &pair : subscribers_) {
+                for (auto &callback : pair.second) {
+                    callback(data);  // Call directly without extra copying
                 }
-            }
-            for (auto &callback : all_callbacks) {
-                callback(data);
             }
         }
 
     private:
-        std::unordered_map<EventKey, std::vector<Callback>> subscribers_;
-        mutable std::mutex mutex_;
+        std::unordered_map<EventKey, CallbackList> subscribers_;
+        mutable std::shared_mutex mutex_;  // Use shared_mutex for better read performance
     };
 
 } // namespace EldenTree
